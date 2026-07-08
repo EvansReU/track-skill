@@ -61,6 +61,12 @@ track pack
 
 都会触发本地 Track CLI。
 
+当 Codex 本轮已经自动执行 `track this` 并保存当前对话时，回复末尾应显示：
+
+```text
+【已Track】
+```
+
 ### 初始化
 
 ```bash
@@ -347,6 +353,12 @@ track
 track this
 track 查 token消耗
 track pack
+```
+
+When Codex automatically runs `track this` and saves the current conversation in a turn, its reply should end with:
+
+```text
+【已Track】
 ```
 
 ### Initialize

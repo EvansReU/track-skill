@@ -16,6 +16,7 @@ Use the local `track` CLI to record, recall, and package project memory. The CLI
 - Rule extraction auto-saves by default. Do not ask for confirmation before saving locally extracted Track records.
 - For backfill/import on an existing large project, do not scan or read the whole project with Codex. Use `track import ...` and `track backfill extract`, which are local CLI operations.
 - If deeper Codex/AI analysis would read many project files, summarize whole folders, inspect source code broadly, or build a semantic graph beyond local Track rules, ask the user for explicit confirmation first and state that Codex token usage may be high.
+- If this turn automatically records the current conversation or discussion with Track, end the user-facing reply with the exact marker `【已Track】`.
 
 ## Command Mapping
 
@@ -81,6 +82,12 @@ After running a Track command, summarize the useful result briefly:
 - any error and the exact next fix
 
 Do not paste huge raw JSON unless the user asks.
+
+If the command auto-saved current conversation content, the final line of the reply must be:
+
+```text
+【已Track】
+```
 
 ## Fallback
 
