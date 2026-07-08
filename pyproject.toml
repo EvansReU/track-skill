@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "track-skill"
+version = "0.1.0"
+description = "Local-first project memory graph CLI for AI project context packs."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Evans" }]
+dependencies = []
+
+[project.scripts]
+track = "track.cli:main"
+pmg = "pmg.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pmg*", "track*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

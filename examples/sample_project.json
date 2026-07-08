@@ -1,0 +1,7 @@
+{
+  "name": "history-track",
+  "goal": "追踪 AI 项目中的问题、答案、产出物、决策和上下文",
+  "status": "active",
+  "current_stage": "MVP planning",
+  "hot_summary": "当前项目正在设计一个本地优先的项目记忆图谱 Skill。核心方向是不做普通聊天搜索，而是做结构化关联和上下文包生成。"
+}
