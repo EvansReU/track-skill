@@ -119,6 +119,87 @@ class ProjectMemoryGraphTests(unittest.TestCase):
             data = json.loads(recall.stdout)
             self.assertTrue(data["context_pack"]["matched_items"]["questions"])
 
+    def test_cli_add_commands_create_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "pmg.sqlite"
+            env = {**os.environ, "TRACK_HOME": str(Path(tmp) / "home")}
+            base = [sys.executable, "-m", "track.cli", "--db", str(db)]
+            project = "project_find-my-life"
+
+            subprocess.run(base + ["init"], check=True, capture_output=True, text=True, env=env)
+            subprocess.run(
+                base + ["project", "create", "--name", project],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+            add_commands = [
+                [
+                    "task",
+                    "add",
+                    "--project",
+                    project,
+                    "--title",
+                    "repro-track-bug",
+                    "--description",
+                    "repro",
+                    "--status",
+                    "open",
+                    "--priority",
+                    "medium",
+                ],
+                [
+                    "context",
+                    "add",
+                    "--project",
+                    project,
+                    "--type",
+                    "bug",
+                    "--importance",
+                    "high",
+                    "--status",
+                    "active",
+                    "--content",
+                    "repro track add bug",
+                ],
+                [
+                    "decision",
+                    "add",
+                    "--project",
+                    project,
+                    "--title",
+                    "repro",
+                    "--decision",
+                    "repro",
+                    "--reason",
+                    "repro",
+                ],
+                [
+                    "artifact",
+                    "add",
+                    "--project",
+                    project,
+                    "--title",
+                    "repro artifact",
+                    "--type",
+                    "report",
+                    "--summary",
+                    "repro",
+                ],
+            ]
+
+            for command in add_commands:
+                result = subprocess.run(
+                    base + command,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+                self.assertIn(f"Created {command[0]}:", result.stdout)
+
     def test_import_and_backfill_auto_save(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "track.sqlite"

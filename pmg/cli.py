@@ -285,9 +285,9 @@ def main(argv: list[str] | None = None) -> int:
 def dispatch(conn, args) -> str | None:
     if args.command == "project":
         if args.project_command == "enter":
-            project, created = enter_project(conn, args.name)
+            project, was_created = enter_project(conn, args.name)
             set_current_project(project["name"])
-            heading = "Created and entered" if created else "Entered"
+            heading = "Created and entered" if was_created else "Entered"
             return f"{heading} project: {project['name']}\n\n" + render_track_pack(conn, project["name"], "markdown")
         if args.project_command == "create":
             item = create_project(conn, args.name, args.description, args.goal, args.status, args.stage, args.summary)

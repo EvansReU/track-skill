@@ -14,6 +14,8 @@ Use the local `track` CLI to record, recall, and package project memory. The CLI
 - Prefer running the CLI over explaining it.
 - Track is local-first and default 0 token; do not call external AI for Track commands.
 - Rule extraction auto-saves by default. Do not ask for confirmation before saving locally extracted Track records.
+- For backfill/import on an existing large project, do not scan or read the whole project with Codex. Use `track import ...` and `track backfill extract`, which are local CLI operations.
+- If deeper Codex/AI analysis would read many project files, summarize whole folders, inspect source code broadly, or build a semantic graph beyond local Track rules, ask the user for explicit confirmation first and state that Codex token usage may be high.
 
 ## Command Mapping
 
@@ -65,6 +67,8 @@ track backfill extract
 track backfill review
 track backfill complete
 ```
+
+These commands are the default path for old projects. They may read files locally through the Track CLI, but Codex should not open and analyze the full file contents unless the user explicitly confirms a higher-token Codex analysis pass.
 
 ## Reporting Back
 

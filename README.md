@@ -231,6 +231,8 @@ track pack
 
 Backfill 使用和 `track this` 相同的本地规则，自动保存提取节点，并标记 source material ID、confidence 和 extraction method。它不会调用 AI。
 
+**Codex 使用限制：** 在已有大型项目中补录时，Codex 必须优先调用 `track import ...` 和 `track backfill extract`，不得自行扫描、打开、总结整个项目文件。若需要 Codex/AI 深度分析大量文件、生成语义图谱或总结完整项目，必须先向用户确认，并说明这会消耗较多 Codex token。
+
 ### Cost Guard
 
 ```bash
@@ -516,6 +518,8 @@ track pack
 ```
 
 Backfill extraction uses the same local rules as `track this`, auto-saves extracted nodes, and marks them with source material IDs, confidence, and extraction method. It does not call AI.
+
+**Codex usage guard:** When backfilling an existing large project, Codex must prefer `track import ...` and `track backfill extract`. Codex must not scan, open, or summarize the entire project itself. If deeper Codex/AI analysis would read many files, build a semantic graph, or summarize the full project, it must ask the user for explicit confirmation and state that Codex token usage may be high.
 
 ### Cost Guard
 
