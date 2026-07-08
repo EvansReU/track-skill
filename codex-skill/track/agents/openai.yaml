@@ -1,0 +1,4 @@
+interface:
+  display_name: "Track"
+  short_description: "Use the local Track project memory CLI."
+  default_prompt: "track this --text \"Summarize and save the current project decision.\""

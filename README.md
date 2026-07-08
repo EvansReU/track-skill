@@ -41,6 +41,26 @@ python3 -m pip install -e .
 - `track`：主命令
 - `pmg`：早期 Project Memory Graph MVP 的兼容别名
 
+### 在 Codex 中启用 Skill
+
+如果希望在 Codex 里直接输入 `track` 就调用本工具，而不是被理解成“重新做一个 Track”或 git track，请安装仓库里的 Codex Skill：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R codex-skill/track ~/.codex/skills/track
+```
+
+安装后开启新的 Codex 线程或重启 Codex，让 Skill 列表重新加载。之后：
+
+```text
+track
+track this
+track 查 token消耗
+track pack
+```
+
+都会触发本地 Track CLI。
+
 ### 初始化
 
 ```bash
@@ -308,6 +328,24 @@ This installs two command names:
 
 - `track`: primary CLI
 - `pmg`: compatibility alias for the earlier Project Memory Graph MVP
+
+### Enable The Codex Skill
+
+To make Codex treat `track` as this local tool instead of a request to rebuild Track or a git tracking command, install the bundled Codex Skill:
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R codex-skill/track ~/.codex/skills/track
+```
+
+Then start a new Codex thread or restart Codex so the skill list reloads. After that, prompts like these should call the local Track CLI:
+
+```text
+track
+track this
+track 查 token消耗
+track pack
+```
 
 ### Initialize
 
