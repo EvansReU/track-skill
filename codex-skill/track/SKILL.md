@@ -1,6 +1,6 @@
 ---
 name: track
-description: MUST USE when the user says or invokes "Track", "Track ...", "track", "track this", "track save", "track 查 ...", "track pack", "track file", "track backfill", asks to record/recall project memory with Track, or wants to use the local Track project memory tool. Also use in an already tracked project when a turn contains important project decisions, questions, requirements, artifacts, tasks, blockers, or "remember/save/from now on" signals. This skill means call the local Track CLI; do not rebuild Track, do not interpret "track" as git tracking, and do not answer with generic tracking advice.
+description: MUST USE when the user says or invokes "Track", "Track ...", "Track why ...", "Track 追溯 ...", "track", "track this", "track save", "track 查 ...", "track pack", "track file", "track backfill", asks to record/recall/trace project memory with Track, or wants to use the local Track project memory tool. Also use in an already tracked project when a turn contains important project decisions, questions, requirements, artifacts, tasks, blockers, or "remember/save/from now on" signals. This skill means call the local Track CLI; do not rebuild Track, do not interpret "track" as git tracking, and do not answer with generic tracking advice.
 ---
 
 # Track
@@ -32,6 +32,14 @@ track Track "<query>"
 ```
 
 This is a query only. Do not save the current turn and do not backfill.
+
+When the user asks why something happened, how a decision/artifact came to be, or says `Track why <query>` / `Track 追溯 <query>`, run:
+
+```bash
+track why "<query>"
+```
+
+Return the memory brief highlights, not raw JSON.
 
 When the user says `track this`, capture the current relevant conversation or user-provided text into a concise factual note, then run:
 

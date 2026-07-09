@@ -322,6 +322,14 @@ class ProjectMemoryGraphTests(unittest.TestCase):
             self.assertIn("Related Decisions", query.stdout)
             self.assertIn("主入口", query.stdout)
 
+            why = subprocess.run(base + ["why", "主入口"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("Track 回忆包", why.stdout)
+            self.assertIn("一句话帮你想起来", why.stdout)
+            self.assertIn("关键决策", why.stdout)
+
+            trace = subprocess.run(base + ["Track", "追溯", "主入口"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("Track 回忆包", trace.stdout)
+
             off = subprocess.run(base + ["Track", "off"], check=True, capture_output=True, text=True, env=env)
             self.assertIn("disabled", off.stdout)
             skipped = subprocess.run(

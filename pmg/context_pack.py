@@ -249,3 +249,125 @@ def render_context_pack(pack: dict, output_format: str = "markdown") -> str:
     for step in cp["suggested_next_steps"]:
         lines.append(f"- {step}")
     return "\n".join(lines).strip() + "\n"
+
+
+def build_recall_brief(
+    conn: sqlite3.Connection,
+    query: str,
+    project_name: str | None = None,
+    top_k: int = 10,
+    depth: int = 1,
+) -> dict:
+    pack = build_recall_context_pack(conn, query, project_name, top_k, depth)
+    cp = pack["context_pack"]
+    items = cp["matched_items"]
+    return {
+        "recall_brief": {
+            "query": query,
+            "generated_at": cp["generated_at"],
+            "project": cp["project"],
+            "answer": infer_brief_answer(query, items),
+            "background": brief_background(items),
+            "key_decisions": items["decisions"],
+            "related_questions": items["questions"],
+            "related_contexts": items["contexts"],
+            "related_artifacts": items["artifacts"],
+            "open_tasks": items["tasks"],
+            "source_trail": cp["related_graph"],
+            "current_status": infer_current_status(items),
+            "next_prompts": suggest_memory_prompts(query, items),
+        }
+    }
+
+
+def infer_brief_answer(query: str, items: dict) -> str:
+    if items["decisions"]:
+        decision = items["decisions"][0]
+        return f"与「{query}」最相关的当前决策是：{decision['decision']}"
+    if items["questions"]:
+        question = items["questions"][0]
+        return f"与「{query}」最相关的历史问题是：{question['title']}"
+    if items["contexts"]:
+        context = items["contexts"][0]
+        return f"与「{query}」最相关的上下文是：{context['content']}"
+    if items["artifacts"]:
+        artifact = items["artifacts"][0]
+        return f"与「{query}」最相关的产出物是：{artifact['title']}"
+    return f"暂时没有找到足够明确的历史记录来还原「{query}」。"
+
+
+def brief_background(items: dict) -> list[str]:
+    background: list[str] = []
+    for question in items["questions"][:2]:
+        background.append(f"当时的问题：{question['title']}")
+    for context in items["contexts"][:2]:
+        background.append(f"当时的约束/背景：{context['content']}")
+    return background
+
+
+def infer_current_status(items: dict) -> list[str]:
+    status: list[str] = []
+    for decision in items["decisions"][:3]:
+        status.append(f"仍需按决策状态判断：{decision['title']} [{decision.get('status') or 'unknown'}/{decision.get('confidence') or 'unknown'}]")
+    for task in items["tasks"][:3]:
+        status.append(f"相关任务：{task['title']} [{task.get('status') or 'unknown'}]")
+    if not status:
+        status.append("没有找到明确的当前状态记录。")
+    return status
+
+
+def suggest_memory_prompts(query: str, items: dict) -> list[str]:
+    prompts = [f"继续追溯「{query}」的来源关系"]
+    if items["decisions"]:
+        prompts.append("查看这些决策是否仍然有效")
+    if items["artifacts"]:
+        prompts.append("追溯相关产出物是由哪个问题或决策触发的")
+    if items["tasks"]:
+        prompts.append("查看相关待办是否已经完成或被废弃")
+    return prompts[:4]
+
+
+def render_recall_brief(brief: dict, output_format: str = "markdown") -> str:
+    if output_format == "json":
+        return json_output(brief)
+    if output_format == "yaml":
+        return simple_yaml(brief)
+    rb = brief["recall_brief"]
+    project = rb.get("project") or {}
+    lines = [
+        "# Track 回忆包",
+        "",
+        "## 你问的是",
+        "",
+        str(rb["query"]),
+        "",
+        "## 一句话帮你想起来",
+        "",
+        rb["answer"],
+        "",
+        "## 当时的背景",
+        "",
+    ]
+    lines += [f"- {item}" for item in rb["background"]] or ["_没有找到明确背景。_"]
+    lines += ["", "## 关键决策", ""]
+    lines += [f"- {x['title']}：{x['decision']} [{x.get('status') or 'unknown'}/{x.get('confidence') or 'unknown'}]" for x in rb["key_decisions"]] or ["_没有找到相关决策。_"]
+    lines += ["", "## 相关问题", ""]
+    lines += [f"- {x['title']} [{x.get('status') or 'unknown'}/{x.get('confidence') or 'unknown'}]" for x in rb["related_questions"]] or ["_没有找到相关问题。_"]
+    lines += ["", "## 相关上下文", ""]
+    lines += [f"- {x['content']} [{x.get('context_type') or 'unknown'}/{x.get('importance') or 'unknown'}/{x.get('confidence') or 'unknown'}]" for x in rb["related_contexts"]] or ["_没有找到相关上下文。_"]
+    lines += ["", "## 相关产出物", ""]
+    lines += [f"- {x['title']} ({x.get('artifact_type') or 'other'})：{x.get('summary') or ''} [{x.get('confidence') or 'unknown'}]" for x in rb["related_artifacts"]] or ["_没有找到相关产出物。_"]
+    lines += ["", "## 当前状态", ""]
+    lines += [f"- {item}" for item in rb["current_status"]]
+    lines += ["", "## 可追溯线索", ""]
+    if rb["source_trail"]:
+        for rel in rb["source_trail"][:8]:
+            note = f" - {rel['note']}" if rel.get("note") else ""
+            lines.append(f"- {rel['source']} --{rel['relation']}--> {rel['target']}{note}")
+    else:
+        lines.append("_没有找到明确关系链。_")
+    lines += ["", "## 你可以继续问", ""]
+    lines += [f"- {prompt}" for prompt in rb["next_prompts"]]
+    if project.get("name"):
+        lines += ["", f"_Project: {project['name']}_"]
+    return "\n".join(lines).strip() + "\n"

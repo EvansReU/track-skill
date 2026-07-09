@@ -7,7 +7,7 @@ from pathlib import Path
 from .backfill import complete_backfill, extract_from_sources, review_backfill, start_backfill
 from .capture import capture_candidates, should_auto_track
 from .config import LATEST_CANDIDATES_PATH, get_current_project, init_config, set_current_project
-from .context_pack import build_project_context_pack, build_recall_context_pack, render_context_pack
+from .context_pack import build_project_context_pack, build_recall_brief, build_recall_context_pack, render_context_pack, render_recall_brief
 from .cost_guard import enforce_context_limit, estimate_tokens, list_ai_logs, status as cost_status, update_mode
 from .db import DEFAULT_DB_PATH, connect, init_db
 from .importers import import_file, import_folder, import_text
@@ -46,6 +46,8 @@ KNOWN_COMMANDS = {
     "relation",
     "search",
     "recall",
+    "why",
+    "追溯",
     "context-pack",
     "capture",
     "save-candidates",
@@ -185,6 +187,20 @@ def build_parser() -> argparse.ArgumentParser:
     recall.add_argument("--depth", type=int, default=1)
     recall.add_argument("--format", choices=["markdown", "json", "yaml"], default="markdown")
 
+    why = sub.add_parser("why", help="Build a memory brief that explains why/how something happened")
+    why.add_argument("query")
+    why.add_argument("--project")
+    why.add_argument("--top-k", type=int, default=10)
+    why.add_argument("--depth", type=int, default=1)
+    why.add_argument("--format", choices=["markdown", "json", "yaml"], default="markdown")
+
+    trace = sub.add_parser("追溯", help="Build a memory brief that explains why/how something happened")
+    trace.add_argument("query")
+    trace.add_argument("--project")
+    trace.add_argument("--top-k", type=int, default=10)
+    trace.add_argument("--depth", type=int, default=1)
+    trace.add_argument("--format", choices=["markdown", "json", "yaml"], default="markdown")
+
     context_pack = sub.add_parser("context-pack")
     context_pack.add_argument("--project")
     context_pack.add_argument("--format", choices=["markdown", "json", "yaml"], default="markdown")
@@ -267,6 +283,8 @@ def normalize_argv(argv: list[str]) -> list[str]:
     if first == "Track":
         if len(argv) == first_index + 1:
             return argv[:first_index] + ["project", "enter", Path.cwd().name]
+        if argv[first_index + 1] in {"why", "追溯"} and len(argv) > first_index + 2:
+            return argv[:first_index] + [argv[first_index + 1], " ".join(argv[first_index + 2 :])]
         value = " ".join(argv[first_index + 1 :])
         if value == "on":
             return argv[:first_index] + ["on"]
@@ -392,6 +410,12 @@ def dispatch(conn, args) -> str | None:
         project = args.project or get_current_project()
         pack = build_recall_context_pack(conn, args.query, project, args.top_k, args.depth)
         text = render_context_pack(pack, args.format)
+        return text if args.format != "markdown" else enforce_context_limit(text)[0]
+
+    if args.command in {"why", "追溯"}:
+        project = args.project or get_current_project()
+        brief = build_recall_brief(conn, args.query, project, args.top_k, args.depth)
+        text = render_recall_brief(brief, args.format)
         return text if args.format != "markdown" else enforce_context_limit(text)[0]
 
     if args.command == "context-pack":
