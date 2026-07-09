@@ -159,6 +159,56 @@ Track why token消耗
 track pack
 ```
 
+### 新项目引入 vs 已开发项目引入
+
+#### 新项目引入 Track
+
+新项目里，Track 从第一天开始记录。
+
+这时它最擅长的是：
+
+- 跟着项目自然积累问题、决策、产出物和待办
+- 在每个重要轮次后自动保存短摘要
+- 让后续查询天然带有清晰时间线
+- 尽量避免未来再做大规模补录
+
+你只需要在项目开始时说：
+
+```text
+Track
+```
+
+之后正常开发和讨论即可。重要轮次会自动 Track。
+
+#### 已开发项目引入 Track
+
+已开发一段时间的项目里，Track 会先建立一层轻量索引。
+
+这时它能帮你：
+
+- 把已有文档、代码、笔记导入为本地材料
+- 提取明显写出来的问题、决策、任务和上下文
+- 让你能用关键词找到历史线索
+- 从“现在开始”把后续讨论记录得更干净
+
+但它默认不会做这些事：
+
+- 不让 Codex 深度扫描整个项目
+- 不自动理解所有代码架构
+- 不生成完整语义图谱
+- 不消耗大量 token 去总结全部历史
+
+推荐流程：
+
+```bash
+Track
+track import folder --path . --recursive
+track backfill extract
+track pack
+```
+
+这会得到一个可用的轻量索引。之后如果你想深度整理某个关键模块，可以再明确要求 Codex 分析那个局部，并确认 token 成本。
+
 ### 安装
 
 ```bash
@@ -309,6 +359,56 @@ Ask Codex directly for reasoning in the current context.
 Use Track when the relevant context may live in another thread, another day, or another artifact.
 
 Track finds the facts and relationships. Codex interprets them and helps you move forward.
+
+### New Projects vs Existing Projects
+
+#### Starting Track In A New Project
+
+In a new project, Track starts recording from day one.
+
+It is best at:
+
+- naturally accumulating questions, decisions, artifacts, and tasks
+- auto-saving short summaries after important turns
+- keeping a cleaner timeline from the beginning
+- avoiding a large backfill later
+
+Start with:
+
+```text
+Track
+```
+
+Then keep working normally. Important turns can be auto-tracked.
+
+#### Adding Track To An Existing Project
+
+In an existing project, Track first builds a lightweight local index.
+
+It can help you:
+
+- import existing docs, code, and notes as local source material
+- extract obvious questions, decisions, tasks, and context
+- find historical clues by keyword
+- keep future project memory cleaner from this point forward
+
+By default, it does not:
+
+- ask Codex to deeply scan the whole project
+- fully understand every code module
+- build a complete semantic architecture graph
+- spend lots of tokens summarizing all history
+
+Recommended flow:
+
+```bash
+Track
+track import folder --path . --recursive
+track backfill extract
+track pack
+```
+
+This gives you a useful lightweight index. If you later want deep analysis of a specific module, ask Codex explicitly and confirm the token cost.
 
 ### Install
 
