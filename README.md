@@ -62,6 +62,12 @@ Track 会返回相关问题、决策、上下文、产出物和关系线索。
 
 自动 Track 默认只保存本轮极短摘要或用户原话片段，不读取历史，不扫描项目，不调用 AI。
 
+Track 的作用域也很明确：
+
+- 在单独对话里使用时，Track 只对这个单独对话生效。
+- 在某个 Codex 项目里使用时，项目下任意对话都可以 Track 当前项目。
+- 如果你在另一个对话里要求 Track 某个不同项目或不同对话，Codex 不会跨项目代记，而应提示你进入对应项目/对话中调用 Track。
+
 自动记录成功后，Codex 回复末尾应显示：
 
 ```text
@@ -317,6 +323,12 @@ Auto Track is for:
 - explicit “remember/save/from now on” signals
 
 Auto Track only passes a short current-turn summary or user quote. It does not read history, scan files, or call AI.
+
+Track scope is strict:
+
+- In a standalone conversation, Track only applies to that standalone conversation.
+- Inside a Codex project, any conversation in that project may Track the current project.
+- If you ask Codex from another conversation to Track a different project or conversation, Codex should not do cross-project tracking. It should ask you to open the target project/conversation and run Track there.
 
 When it saves successfully, Codex should end with:
 

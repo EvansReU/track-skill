@@ -14,6 +14,8 @@ Use the local `track` CLI to record, recall, and package project memory. The CLI
 - Prefer running the CLI over explaining it.
 - Track is local-first and default 0 token; do not call external AI for Track commands.
 - Rule extraction auto-saves by default. Do not ask for confirmation before saving locally extracted Track records.
+- Scope is strict. In a standalone Codex conversation, Track only applies to that standalone conversation. In a Codex project, any conversation inside that project may Track the current project. Do not Track another project or another standalone conversation from here.
+- If the user asks to Track a different project, a different conversation, or another project's history from the current context, do not run Track. Tell the user to open the corresponding project/conversation and invoke Track there.
 - For backfill/import on an existing large project, do not scan or read the whole project with Codex. Use `track import ...` and `track backfill extract`, which are local CLI operations.
 - If deeper Codex/AI analysis would read many project files, summarize whole folders, inspect source code broadly, or build a semantic graph beyond local Track rules, ask the user for explicit confirmation first and state that Codex token usage may be high.
 - In an already tracked project with auto Track enabled, automatically run `track auto --text "<short turn summary>"` at the end of important turns. The text must be only the current turn's short factual summary or relevant user quote, preferably under 300 Chinese characters; do not read history or files for this.
@@ -23,7 +25,7 @@ Use the local `track` CLI to record, recall, and package project memory. The CLI
 
 ## Command Mapping
 
-When the user says exactly `Track` or `track`, run `track Track`. The CLI maps this to the current workspace folder name. If the project is new, this creates the Track record, enables auto Track, and performs lightweight local backfill. If the project already exists, this is a manual force-save request for the current turn; run `track this --text "<short current turn summary>"` when there is current turn content to save.
+When the user says exactly `Track` or `track`, first confirm the target is the current standalone conversation or the current Codex project. If the user explicitly names another project or conversation, refuse cross-project tracking and ask them to run Track in that target context. Otherwise run `track Track`. The CLI maps this to the current workspace folder name. If the project is new, this creates the Track record, enables auto Track, and performs lightweight local backfill. If the project already exists, this is a manual force-save request for the current turn; run `track this --text "<short current turn summary>"` when there is current turn content to save.
 
 When the user says `Track <query>`, run:
 
