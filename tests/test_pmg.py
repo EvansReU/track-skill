@@ -296,6 +296,44 @@ class ProjectMemoryGraphTests(unittest.TestCase):
             pack = subprocess.run(base + ["pack"], check=True, capture_output=True, text=True, env=env)
             self.assertIn("Track Pack", pack.stdout)
 
+    def test_first_track_builds_usable_lightweight_index_for_existing_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = root / "track.sqlite"
+            home = root / "home"
+            project_dir = root / "active-project"
+            notes_dir = project_dir / "notes"
+            notes_dir.mkdir(parents=True)
+            (project_dir / "README.md").write_text(
+                "# Active Project\n\n"
+                "这个项目必须默认 0 token。下一步需要实现 backfill 可用索引。\n",
+                encoding="utf-8",
+            )
+            (notes_dir / "decision.md").write_text(
+                "决定首次 Track 时自动建立轻量索引，不做全项目 AI 扫描。\n",
+                encoding="utf-8",
+            )
+            env = {**os.environ, "TRACK_HOME": str(home), "PYTHONPATH": str(Path.cwd())}
+            base = [sys.executable, "-m", "track.cli", "--db", str(db)]
+
+            subprocess.run(base + ["init"], check=True, capture_output=True, text=True, env=env)
+            first = subprocess.run(base + ["Track"], cwd=project_dir, check=True, capture_output=True, text=True, env=env)
+            self.assertIn("轻量补录摘要", first.stdout)
+            self.assertIn("导入高价值本地文件", first.stdout)
+            self.assertIn("Auto Track:\non", first.stdout)
+
+            recall = subprocess.run(
+                base + ["Track", "backfill 可用索引"],
+                cwd=project_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn("Related", recall.stdout)
+            self.assertIn("backfill", recall.stdout)
+            self.assertIn("README.md", recall.stdout)
+
     def test_track_capital_entry_auto_query_and_toggle(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "track.sqlite"

@@ -192,7 +192,8 @@ Track
 
 这时它能帮你：
 
-- 把已有文档、代码、笔记导入为本地材料
+- 自动挑选 README、AGENTS、docs、notes 等高价值本地文件
+- 把这些文件登记为本地材料和项目产物
 - 提取明显写出来的问题、决策、任务和上下文
 - 让你能用关键词找到历史线索
 - 从“现在开始”把后续讨论记录得更干净
@@ -203,17 +204,22 @@ Track
 - 不自动理解所有代码架构
 - 不生成完整语义图谱
 - 不消耗大量 token 去总结全部历史
+- 不保证一次性还原所有已经发生过的口头讨论
 
-推荐流程：
+推荐流程很简单：
 
-```bash
+```text
 Track
-track import folder --path . --recursive
-track backfill extract
-track pack
 ```
 
-这会得到一个可用的轻量索引。之后如果你想深度整理某个关键模块，可以再明确要求 Codex 分析那个局部，并确认 token 成本。
+第一次输入 `Track` 后，它会自动建立可用的轻量索引。之后如果你还有额外材料，比如会议记录、交接文档、旧笔记，可以再手动补充：
+
+```bash
+track import folder --path docs --recursive
+track backfill extract
+```
+
+如果你想深度整理某个关键模块，可以再明确要求 Codex 分析那个局部，并确认 token 成本。
 
 ### 安装
 
@@ -399,7 +405,8 @@ In an existing project, Track first builds a lightweight local index.
 
 It can help you:
 
-- import existing docs, code, and notes as local source material
+- automatically pick high-value local files such as README, AGENTS, docs, and notes
+- register those files as local source material and project artifacts
 - extract obvious questions, decisions, tasks, and context
 - find historical clues by keyword
 - keep future project memory cleaner from this point forward
@@ -410,17 +417,22 @@ By default, it does not:
 - fully understand every code module
 - build a complete semantic architecture graph
 - spend lots of tokens summarizing all history
+- recover every past conversation in one pass
 
 Recommended flow:
 
-```bash
+```text
 Track
-track import folder --path . --recursive
-track backfill extract
-track pack
 ```
 
-This gives you a useful lightweight index. If you later want deep analysis of a specific module, ask Codex explicitly and confirm the token cost.
+The first `Track` builds a useful lightweight index automatically. If you have extra material, such as meeting notes, handoff docs, or old notes, you can add it later:
+
+```bash
+track import folder --path docs --recursive
+track backfill extract
+```
+
+If you later want deep analysis of a specific module, ask Codex explicitly and confirm the token cost.
 
 ### Install
 

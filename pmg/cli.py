@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .backfill import complete_backfill, extract_from_sources, review_backfill, start_backfill
+from .backfill import complete_backfill, extract_from_sources, lightweight_project_backfill, review_backfill, start_backfill
 from .capture import capture_candidates, should_auto_track
 from .config import LATEST_CANDIDATES_PATH, get_current_project, init_config, set_current_project
 from .context_pack import build_project_context_pack, build_recall_brief, build_recall_context_pack, render_context_pack, render_recall_brief
@@ -331,11 +331,14 @@ def dispatch(conn, args) -> str | None:
             project, was_created = enter_project(conn, args.name)
             set_current_project(project["name"])
             if was_created:
-                start_backfill(conn, project["name"])
-                project = complete_backfill(conn, project["name"])
+                backfill_result = lightweight_project_backfill(conn, project["name"], Path.cwd())
+                saved = save_candidates_data(conn, backfill_result["candidates"], groups=None)
+                project = backfill_result["project_status"]
                 return (
                     "已为当前项目创建 Track 记录，并完成轻量补录。\n"
                     "后续我会自动记录重要轮次。\n\n"
+                    + render_lightweight_backfill_summary(backfill_result, saved)
+                    + "\n\n"
                     + project_card(project)
                 )
             heading = "Created and entered" if was_created else "Entered"
@@ -705,6 +708,20 @@ def artifact_from_file_args(args) -> tuple[str, str | None, str | None]:
     if not args.title:
         raise ValueError("Use --path or --title.")
     return args.title, args.summary, None
+
+
+def render_lightweight_backfill_summary(backfill_result: dict, saved: dict) -> str:
+    imported_count = len(backfill_result.get("imported", []))
+    saved_counts = {group: len(ids) for group, ids in saved.items() if not group.startswith("_")}
+    saved_text = "，".join(f"{group} {count}" for group, count in saved_counts.items() if count) or "未发现明显结构化节点"
+    return "\n".join(
+        [
+            "轻量补录摘要：",
+            f"- 导入高价值本地文件 {imported_count} 个",
+            f"- 自动保存：{saved_text}",
+            "- 默认未调用 AI，未做全项目深度分析",
+        ]
+    )
 
 
 def project_card(item: dict) -> str:
