@@ -4,10 +4,11 @@ import re
 
 
 QUESTION_MARKERS = ("是否", "怎么", "如何", "要不要", "能不能", "为什么", "?")
-DECISION_MARKERS = ("决定", "不做", "改成", "先做", "放弃", "MVP 阶段", "应该", "采用")
-ARTIFACT_MARKERS = ("生成文档", "交接文档", "代码", "PRD", "报告", "Prompt", "产出物")
-TASK_MARKERS = ("下一步", "待办", "需要实现", "先完成", "实现", "补测试")
-CONTEXT_MARKERS = ("我希望", "我担心", "约束", "成本", "本地", "云端", "token")
+DECISION_MARKERS = ("决定", "不做", "改成", "先做", "放弃", "MVP 阶段", "应该", "采用", "默认", "必须", "修正", "重构")
+ARTIFACT_MARKERS = ("生成文档", "交接文档", "代码", "PRD", "报告", "Prompt", "产出物", "生成", "文档", "方案", "交接")
+TASK_MARKERS = ("下一步", "待办", "需要实现", "先完成", "实现", "补测试", "后续")
+CONTEXT_MARKERS = ("我希望", "我担心", "约束", "成本", "本地", "云端", "token", "不符合预期", "偏离初衷", "保存", "记住", "以后", "从现在开始")
+AUTO_TRACK_MARKERS = QUESTION_MARKERS + DECISION_MARKERS + ARTIFACT_MARKERS + TASK_MARKERS + CONTEXT_MARKERS + ("问题",)
 
 
 def split_sentences(text: str) -> list[str]:
@@ -127,3 +128,12 @@ def capture_candidates(project: str, text: str) -> dict:
                 }
             )
     return {"project": project, "candidates": candidates}
+
+
+def should_auto_track(text: str) -> bool:
+    compact = text.strip()
+    if not compact:
+        return False
+    if compact in {"好", "好的", "可以", "嗯", "收到", "ok", "OK", "谢谢", "明白"}:
+        return False
+    return any(marker in compact for marker in AUTO_TRACK_MARKERS)

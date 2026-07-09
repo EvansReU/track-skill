@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS projects (
     backfill_status TEXT DEFAULT 'not_started',
     backfilled_at TEXT,
     source_summary TEXT,
+    tracked INTEGER DEFAULT 1,
+    auto_track_enabled INTEGER DEFAULT 1,
+    last_auto_tracked_at TEXT,
     created_at TEXT,
     updated_at TEXT
 );
@@ -202,6 +205,9 @@ MIGRATIONS = {
         "backfill_status": "TEXT DEFAULT 'not_started'",
         "backfilled_at": "TEXT",
         "source_summary": "TEXT",
+        "tracked": "INTEGER DEFAULT 1",
+        "auto_track_enabled": "INTEGER DEFAULT 1",
+        "last_auto_tracked_at": "TEXT",
     },
     "questions": {
         "confidence": "TEXT DEFAULT 'user_confirmed'",

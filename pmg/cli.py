@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from .backfill import complete_backfill, extract_from_sources, review_backfill, start_backfill
-from .capture import capture_candidates
+from .capture import capture_candidates, should_auto_track
 from .config import LATEST_CANDIDATES_PATH, get_current_project, init_config, set_current_project
 from .context_pack import build_project_context_pack, build_recall_context_pack, render_context_pack
 from .cost_guard import enforce_context_limit, estimate_tokens, list_ai_logs, status as cost_status, update_mode
@@ -25,6 +25,8 @@ from .repository import (
     enter_project,
     get_project,
     list_projects,
+    mark_project_auto_tracked,
+    set_project_auto_track,
     update_project_summary,
 )
 from .search import search
@@ -55,6 +57,10 @@ KNOWN_COMMANDS = {
     "import",
     "backfill",
     "cost",
+    "auto",
+    "on",
+    "off",
+    "Track",
 }
 
 
@@ -197,13 +203,20 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--format", choices=["json"], default="json")
 
     save = sub.add_parser("save")
+    save.add_argument("--project")
     save.add_argument("--include")
     save.add_argument("--all", action="store_true", dest="save_all")
 
     save_candidates = sub.add_parser("save-candidates")
     save_candidates.add_argument("path")
+    save_candidates.add_argument("--project")
     save_candidates.add_argument("--all", action="store_true", dest="save_all")
     save_candidates.add_argument("--include")
+
+    auto = sub.add_parser("auto", help="Auto-track current text only if local rules say it matters")
+    auto.add_argument("--text")
+    auto.add_argument("--file")
+    auto.add_argument("--project")
 
     file_parser = sub.add_parser("file")
     file_parser.add_argument("--path")
@@ -236,18 +249,30 @@ def build_parser() -> argparse.ArgumentParser:
     cost.add_argument("action", nargs="?", default="status", choices=["status", "mode", "logs", "estimate"])
     cost.add_argument("value", nargs="?")
 
+    sub.add_parser("on", help="Enable auto Track for current project")
+    sub.add_parser("off", help="Disable auto Track for current project")
+
     return parser
 
 
 def normalize_argv(argv: list[str]) -> list[str]:
     if not argv:
-        return argv
+        return ["project", "enter", Path.cwd().name]
     first_index = 0
     while first_index < len(argv) and argv[first_index].startswith("--"):
         first_index += 2 if first_index + 1 < len(argv) else 1
     if first_index >= len(argv):
         return argv
     first = argv[first_index]
+    if first == "Track":
+        if len(argv) == first_index + 1:
+            return argv[:first_index] + ["project", "enter", Path.cwd().name]
+        value = " ".join(argv[first_index + 1 :])
+        if value == "on":
+            return argv[:first_index] + ["on"]
+        if value == "off":
+            return argv[:first_index] + ["off"]
+        return argv[:first_index] + ["recall", value]
     if first == "查":
         query = " ".join(argv[first_index + 1 :])
         return argv[:first_index] + ["recall", query]
@@ -287,6 +312,14 @@ def dispatch(conn, args) -> str | None:
         if args.project_command == "enter":
             project, was_created = enter_project(conn, args.name)
             set_current_project(project["name"])
+            if was_created:
+                start_backfill(conn, project["name"])
+                project = complete_backfill(conn, project["name"])
+                return (
+                    "已为当前项目创建 Track 记录，并完成轻量补录。\n"
+                    "后续我会自动记录重要轮次。\n\n"
+                    + project_card(project)
+                )
             heading = "Created and entered" if was_created else "Entered"
             return f"{heading} project: {project['name']}\n\n" + render_track_pack(conn, project["name"], "markdown")
         if args.project_command == "create":
@@ -374,13 +407,47 @@ def dispatch(conn, args) -> str | None:
         saved = save_candidates_data(conn, candidates, groups=None)
         return json_output({"auto_saved": saved, "candidates": candidates})
 
+    if args.command == "auto":
+        project = resolve_project(args.project)
+        project_row = get_project(conn, project)
+        if not project_row or not project_row.get("auto_track_enabled"):
+            return json_output({"tracked": False, "reason": "auto_track_disabled"})
+        text = text_from_args(args)
+        if not should_auto_track(text):
+            return json_output({"tracked": False, "reason": "no_track_signal"})
+        candidates = capture_candidates(project, text)
+        write_latest_candidates(candidates)
+        saved = save_candidates_data(conn, candidates, groups=None)
+        mark_project_auto_tracked(conn, project)
+        return json_output({"tracked": True, "saved": saved})
+
     if args.command == "save":
         data = read_json(LATEST_CANDIDATES_PATH)
-        return json_output({"saved": save_candidates_data(conn, data, groups=groups_from_args(args.save_all, args.include))})
+        return json_output(
+            {
+                "saved": save_candidates_data(
+                    conn,
+                    data,
+                    groups=groups_from_args(args.save_all, args.include),
+                    project_override=args.project,
+                    skip_missing_project=True,
+                )
+            }
+        )
 
     if args.command == "save-candidates":
         data = read_json(args.path)
-        return json_output({"saved": save_candidates_data(conn, data, groups=groups_from_args(args.save_all, args.include))})
+        return json_output(
+            {
+                "saved": save_candidates_data(
+                    conn,
+                    data,
+                    groups=groups_from_args(args.save_all, args.include),
+                    project_override=args.project,
+                    skip_missing_project=True,
+                )
+            }
+        )
 
     if args.command == "file":
         project = resolve_project(args.project)
@@ -428,6 +495,11 @@ def dispatch(conn, args) -> str | None:
                 raise ValueError("Usage: track cost estimate TEXT")
             return simple_yaml({"estimate": {"input_text": args.value, "tokens": estimate_tokens(args.value)}})
 
+    if args.command in {"on", "off"}:
+        enabled = args.command == "on"
+        row = set_project_auto_track(conn, resolve_project(None), enabled)
+        return f"Auto Track {'enabled' if enabled else 'disabled'} for project: {row['name']}"
+
     raise ValueError(f"Unsupported command: {args.command}")
 
 
@@ -474,10 +546,20 @@ def groups_from_args(save_all: bool, include: str | None) -> set[str] | None:
     return {x.strip() for x in include.split(",") if x.strip()}
 
 
-def save_candidates_data(conn, data: dict, groups: set[str] | None = None) -> dict:
+def save_candidates_data(
+    conn,
+    data: dict,
+    groups: set[str] | None = None,
+    project_override: str | None = None,
+    skip_missing_project: bool = False,
+) -> dict:
     if "project" not in data and "candidates" in data and isinstance(data["candidates"], dict) and "project" in data["candidates"]:
         data = data["candidates"]
-    project = data["project"]
+    project = project_override or data["project"]
+    if not get_project(conn, project):
+        if skip_missing_project:
+            return {"_warnings": [f"Skipped candidates for missing project: {project}"]}
+        raise ValueError(f"Project not found: {project}")
     candidates = data.get("candidates", {})
     active_groups = groups or set(candidates.keys())
     saved: dict[str, list[str]] = {group: [] for group in active_groups}
@@ -583,6 +665,9 @@ def project_card(item: dict) -> str:
             "",
             "Backfill:",
             item.get("backfill_status") or "not_started",
+            "",
+            "Auto Track:",
+            "on" if item.get("auto_track_enabled", 1) else "off",
         ]
     )
 

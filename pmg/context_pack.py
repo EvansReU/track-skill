@@ -141,6 +141,9 @@ def project_fields(project: dict) -> dict:
         "hot_summary": project.get("hot_summary"),
         "origin_type": project.get("origin_type"),
         "backfill_status": project.get("backfill_status"),
+        "tracked": project.get("tracked"),
+        "auto_track_enabled": project.get("auto_track_enabled"),
+        "last_auto_tracked_at": project.get("last_auto_tracked_at"),
     }
 
 

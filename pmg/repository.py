@@ -21,16 +21,19 @@ def create_project(
     hot_summary: str | None = None,
     origin_type: str = "new_tracked",
     backfill_status: str = "not_started",
+    tracked: int = 1,
+    auto_track_enabled: int = 1,
 ) -> dict:
     ts = now_iso()
     project_id = unique_id(conn, "projects", "project", name)
     conn.execute(
         """
         INSERT INTO projects
-        (id, name, description, goal, status, current_stage, hot_summary, origin_type, backfill_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, description, goal, status, current_stage, hot_summary, origin_type, backfill_status,
+         tracked, auto_track_enabled, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (project_id, name, description, goal, status, stage, hot_summary, origin_type, backfill_status, ts, ts),
+        (project_id, name, description, goal, status, stage, hot_summary, origin_type, backfill_status, tracked, auto_track_enabled, ts, ts),
     )
     row = get_by_id(conn, "project", project_id)
     index_row(conn, "project", row)
@@ -72,6 +75,28 @@ def update_project_summary(conn: sqlite3.Connection, name_or_id: str, summary: s
         (summary, now_iso(), project["id"]),
     )
     row = get_by_id(conn, "project", project["id"])
+    index_row(conn, "project", row)
+    return dict(row)
+
+
+def set_project_auto_track(conn: sqlite3.Connection, project: str, enabled: bool) -> dict:
+    project_row = require_project(conn, project)
+    conn.execute(
+        "UPDATE projects SET auto_track_enabled = ?, updated_at = ? WHERE id = ?",
+        (1 if enabled else 0, now_iso(), project_row["id"]),
+    )
+    row = get_by_id(conn, "project", project_row["id"])
+    index_row(conn, "project", row)
+    return dict(row)
+
+
+def mark_project_auto_tracked(conn: sqlite3.Connection, project: str) -> dict:
+    project_row = require_project(conn, project)
+    conn.execute(
+        "UPDATE projects SET last_auto_tracked_at = ?, updated_at = ? WHERE id = ?",
+        (now_iso(), now_iso(), project_row["id"]),
+    )
+    row = get_by_id(conn, "project", project_row["id"])
     index_row(conn, "project", row)
     return dict(row)
 

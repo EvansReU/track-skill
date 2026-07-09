@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from .utils import normalize_entity_type
@@ -15,6 +16,18 @@ ENTITY_FIELDS = {
     "task": ("title", ["description", "status", "priority", "due_date"]),
     "session": ("title", ["summary", "raw_text"]),
     "source_material": ("title", ["source_type", "file_path", "summary", "processed_status"]),
+}
+
+ENTITY_TABLES = {
+    "project": "projects",
+    "question": "questions",
+    "answer": "answers",
+    "artifact": "artifacts",
+    "decision": "decisions",
+    "context": "contexts",
+    "task": "tasks",
+    "session": "sessions",
+    "source_material": "source_materials",
 }
 
 
@@ -53,13 +66,70 @@ def index_row(conn: sqlite3.Connection, entity_type: str, row: sqlite3.Row | dic
     upsert_index(conn, entity_type, row["id"], project_id, title, "\n".join(body_parts))
 
 
+def query_terms(query: str) -> list[str]:
+    return [term.lower() for term in re.findall(r"[A-Za-z0-9_\u4e00-\u9fff]+", query) if term.strip()]
+
+
+def fts_query(query: str) -> str:
+    terms = query_terms(query)
+    if not terms:
+        return query
+    return " OR ".join(f'"{term}"' for term in terms)
+
+
+def row_text(row: sqlite3.Row, entity_type: str) -> tuple[str, str]:
+    title_field, body_fields = ENTITY_FIELDS[entity_type]
+    title = str(row[title_field] or "") if title_field in row.keys() else ""
+    body = "\n".join(str(row[field]) for field in body_fields if field in row.keys() and row[field])
+    return title, body
+
+
+def table_search(
+    conn: sqlite3.Connection,
+    query: str,
+    project_id: str | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    terms = query_terms(query) or [query.lower()]
+    rows: list[dict] = []
+    for entity_type, table in ENTITY_TABLES.items():
+        params: list[object] = []
+        where = ""
+        if project_id:
+            if entity_type == "project":
+                where = "WHERE id = ?"
+            else:
+                where = "WHERE project_id = ?"
+            params.append(project_id)
+        for row in conn.execute(f"SELECT * FROM {table} {where} ORDER BY updated_at DESC, created_at DESC LIMIT 200", params).fetchall():
+            title, body = row_text(row, entity_type)
+            haystack = "\n".join([entity_type, title, body]).lower()
+            if any(term in haystack for term in terms):
+                rows.append(
+                    {
+                        "entity_type": entity_type,
+                        "entity_id": row["id"],
+                        "project_id": row["id"] if entity_type == "project" else row["project_id"],
+                        "title": title,
+                        "body": body,
+                        "tags": "",
+                        "rank": 1,
+                    }
+                )
+                if len(rows) >= limit:
+                    return rows
+    return rows
+
+
 def search(
     conn: sqlite3.Connection,
     query: str,
     project_id: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    params: list[object] = [query]
+    results: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    params: list[object] = [fts_query(query)]
     project_filter = ""
     if project_id:
         project_filter = "AND project_id = ?"
@@ -78,9 +148,20 @@ def search(
         ).fetchall()
     except sqlite3.OperationalError:
         rows = []
-    if not rows:
-        like = f"%{query}%"
-        params = [like, like, like]
+    for row in rows:
+        data = dict(row)
+        key = (data["entity_type"], data["entity_id"])
+        if key not in seen:
+            results.append(data)
+            seen.add(key)
+    if len(results) < limit:
+        terms = query_terms(query) or [query]
+        clauses = []
+        params = []
+        for term in terms:
+            like = f"%{term}%"
+            clauses.append("(title LIKE ? OR body LIKE ? OR tags LIKE ? OR entity_type LIKE ?)")
+            params.extend([like, like, like, like])
         project_filter = ""
         if project_id:
             project_filter = "AND project_id = ?"
@@ -90,9 +171,25 @@ def search(
             f"""
             SELECT entity_type, entity_id, project_id, title, body, tags, 0 AS rank
             FROM search_index
-            WHERE (title LIKE ? OR body LIKE ? OR tags LIKE ?) {project_filter}
+            WHERE ({" OR ".join(clauses)}) {project_filter}
             LIMIT ?
             """,
             params,
         ).fetchall()
-    return [dict(row) for row in rows]
+        for row in rows:
+            data = dict(row)
+            key = (data["entity_type"], data["entity_id"])
+            if key not in seen:
+                results.append(data)
+                seen.add(key)
+                if len(results) >= limit:
+                    break
+    if len(results) < limit:
+        for data in table_search(conn, query, project_id=project_id, limit=limit):
+            key = (data["entity_type"], data["entity_id"])
+            if key not in seen:
+                results.append(data)
+                seen.add(key)
+                if len(results) >= limit:
+                    break
+    return results[:limit]

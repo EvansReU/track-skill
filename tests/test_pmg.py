@@ -200,6 +200,85 @@ class ProjectMemoryGraphTests(unittest.TestCase):
                 )
                 self.assertIn(f"Created {command[0]}:", result.stdout)
 
+            recall = subprocess.run(
+                base
+                + [
+                    "recall",
+                    "--project",
+                    project,
+                    "--top-k",
+                    "10",
+                    "--format",
+                    "json",
+                    "history-track local archive decision artifact task",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            matched = json.loads(recall.stdout)["context_pack"]["matched_items"]
+            self.assertTrue(matched["tasks"])
+            self.assertTrue(matched["contexts"])
+            self.assertTrue(matched["decisions"])
+            self.assertTrue(matched["artifacts"])
+
+    def test_cli_save_all_skips_stale_missing_project_and_saves_valid_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "pmg.sqlite"
+            home = Path(tmp) / "home"
+            env = {**os.environ, "TRACK_HOME": str(home)}
+            base = [sys.executable, "-m", "track.cli", "--db", str(db)]
+            latest = home / "candidates" / "latest_candidates.json"
+
+            subprocess.run(base + ["init"], check=True, capture_output=True, text=True, env=env)
+            subprocess.run(
+                base + ["project", "create", "--name", "history-track"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            latest.write_text(
+                json.dumps(
+                    {
+                        "project": "install-test",
+                        "candidates": {
+                            "tasks": [
+                                {
+                                    "title": "stale install-test candidate",
+                                    "description": "should be skipped",
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stale = subprocess.run(base + ["save", "--all"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("install-test", stale.stdout)
+
+            subprocess.run(
+                base
+                + [
+                    "capture",
+                    "--project",
+                    "history-track",
+                    "--text",
+                    "下一步需要实现 save 验证。",
+                    "--dry-run",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            saved = subprocess.run(base + ["save", "--all"], check=True, capture_output=True, text=True, env=env)
+            data = json.loads(saved.stdout)
+            self.assertTrue(data["saved"]["tasks"])
+
     def test_import_and_backfill_auto_save(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "track.sqlite"
@@ -216,6 +295,46 @@ class ProjectMemoryGraphTests(unittest.TestCase):
             self.assertTrue(data["auto_saved"]["decisions"] or data["auto_saved"]["tasks"])
             pack = subprocess.run(base + ["pack"], check=True, capture_output=True, text=True, env=env)
             self.assertIn("Track Pack", pack.stdout)
+
+    def test_track_capital_entry_auto_query_and_toggle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "track.sqlite"
+            env = {**os.environ, "TRACK_HOME": str(Path(tmp) / "home")}
+            base = [sys.executable, "-m", "track.cli", "--db", str(db)]
+
+            subprocess.run(base + ["init"], check=True, capture_output=True, text=True, env=env)
+            first = subprocess.run(base + ["Track"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("已为当前项目创建 Track 记录", first.stdout)
+            self.assertIn("Auto Track:\non", first.stdout)
+
+            auto = subprocess.run(
+                base + ["auto", "--text", "我觉得这个项目应该把主入口收敛成 Track 和 Track xxxx。"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            auto_data = json.loads(auto.stdout)
+            self.assertTrue(auto_data["tracked"])
+            self.assertTrue(auto_data["saved"]["decisions"])
+
+            query = subprocess.run(base + ["Track", "主入口"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("Related Decisions", query.stdout)
+            self.assertIn("主入口", query.stdout)
+
+            off = subprocess.run(base + ["Track", "off"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("disabled", off.stdout)
+            skipped = subprocess.run(
+                base + ["auto", "--text", "必须保存这个决策。"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(json.loads(skipped.stdout)["reason"], "auto_track_disabled")
+
+            on = subprocess.run(base + ["Track", "on"], check=True, capture_output=True, text=True, env=env)
+            self.assertIn("enabled", on.stdout)
 
 
 if __name__ == "__main__":
