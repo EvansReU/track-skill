@@ -357,37 +357,37 @@ def dispatch(conn, args) -> str | None:
             return project_card(item)
 
     if args.command == "question":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_question(conn, project, args.title, args.text, args.summary, args.status, args.question_type, args.importance)
         return created("question", item)
 
     if args.command == "answer":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_answer(conn, project, args.summary, args.question, args.detail, args.confidence, args.status)
         return created("answer", item)
 
     if args.command == "artifact":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_artifact(conn, project, args.title, args.artifact_type, args.summary, args.content, args.file_path, args.version, args.status)
         return created("artifact", item)
 
     if args.command == "decision":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_decision(conn, project, args.title, args.decision, args.reason, args.alternatives, args.impact, args.status)
         return created("decision", item)
 
     if args.command == "context":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_context(conn, project, args.content, args.context_type, args.importance, args.status)
         return created("context", item)
 
     if args.command == "task":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_task(conn, project, args.title, args.description, args.status, args.priority, args.due_date)
         return created("task", item)
 
     if args.command == "session":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         item = create_session(conn, project, args.title, args.summary, args.raw_text)
         return created("session", item)
 
@@ -407,22 +407,22 @@ def dispatch(conn, args) -> str | None:
         return json_output(rows) if args.format == "json" else render_search(rows)
 
     if args.command == "recall":
-        project = args.project or get_current_project()
+        project = resolve_project(conn, args.project)
         pack = build_recall_context_pack(conn, args.query, project, args.top_k, args.depth)
         text = render_context_pack(pack, args.format)
         return text if args.format != "markdown" else enforce_context_limit(text)[0]
 
     if args.command in {"why", "追溯"}:
-        project = args.project or get_current_project()
+        project = resolve_project(conn, args.project)
         brief = build_recall_brief(conn, args.query, project, args.top_k, args.depth)
         text = render_recall_brief(brief, args.format)
         return text if args.format != "markdown" else enforce_context_limit(text)[0]
 
     if args.command == "context-pack":
-        return render_track_pack(conn, resolve_project(args.project), args.format)
+        return render_track_pack(conn, resolve_project(conn, args.project), args.format)
 
     if args.command in {"this", "capture"}:
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         text = text_from_args(args)
         candidates = capture_candidates(project, text)
         write_latest_candidates(candidates)
@@ -432,7 +432,7 @@ def dispatch(conn, args) -> str | None:
         return json_output({"auto_saved": saved, "candidates": candidates})
 
     if args.command == "auto":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         project_row = get_project(conn, project)
         if not project_row or not project_row.get("auto_track_enabled"):
             return json_output({"tracked": False, "reason": "auto_track_disabled"})
@@ -474,13 +474,13 @@ def dispatch(conn, args) -> str | None:
         )
 
     if args.command == "file":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         title, summary, path = artifact_from_file_args(args)
         item = create_artifact(conn, project, title, args.artifact_type, summary, file_path=path)
         return created("artifact", item)
 
     if args.command == "import":
-        project = resolve_project(getattr(args, "project", None))
+        project = resolve_project(conn, getattr(args, "project", None))
         if args.import_command == "file":
             return json_output(import_file(conn, project, args.path, args.type))
         if args.import_command == "folder":
@@ -489,7 +489,7 @@ def dispatch(conn, args) -> str | None:
             return json_output(import_text(conn, project, args.title, args.text, args.type))
 
     if args.command == "backfill":
-        project = resolve_project(args.project)
+        project = resolve_project(conn, args.project)
         if args.action == "start":
             return project_card(start_backfill(conn, project))
         if args.action == "extract":
@@ -521,14 +521,19 @@ def dispatch(conn, args) -> str | None:
 
     if args.command in {"on", "off"}:
         enabled = args.command == "on"
-        row = set_project_auto_track(conn, resolve_project(None), enabled)
+        row = set_project_auto_track(conn, resolve_project(conn, None), enabled)
         return f"Auto Track {'enabled' if enabled else 'disabled'} for project: {row['name']}"
 
     raise ValueError(f"Unsupported command: {args.command}")
 
 
-def resolve_project(project: str | None) -> str:
-    current = project or get_current_project()
+def resolve_project(conn, project: str | None) -> str:
+    if project:
+        return project
+    cwd_project = get_project(conn, Path.cwd().name)
+    if cwd_project:
+        return cwd_project["name"]
+    current = get_current_project()
     if not current:
         raise ValueError("No current project. Run `track PROJECT_NAME` first, or pass --project.")
     return current
@@ -536,8 +541,8 @@ def resolve_project(project: str | None) -> str:
 
 def project_id_for(conn, project: str | None) -> str | None:
     if not project:
-        current = get_current_project()
-        project = current
+        cwd_project = get_project(conn, Path.cwd().name)
+        project = cwd_project["name"] if cwd_project else get_current_project()
     if not project:
         return None
     row = get_project(conn, project)
@@ -579,15 +584,31 @@ def save_candidates_data(
 ) -> dict:
     if "project" not in data and "candidates" in data and isinstance(data["candidates"], dict) and "project" in data["candidates"]:
         data = data["candidates"]
-    project = project_override or data["project"]
-    if not get_project(conn, project):
+    candidate_project = data.get("project")
+    project = project_override or candidate_project
+    if not project:
+        raise ValueError("Candidates are missing project metadata.")
+    project_row = get_project(conn, project)
+    if not project_row:
         if skip_missing_project:
             return {"_warnings": [f"Skipped candidates for missing project: {project}"]}
         raise ValueError(f"Project not found: {project}")
+    if candidate_project:
+        candidate_project_row = get_project(conn, candidate_project)
+        if not candidate_project_row:
+            if skip_missing_project:
+                return {"_warnings": [f"Skipped candidates for missing project: {candidate_project}"]}
+            raise ValueError(f"Project not found: {candidate_project}")
+        if candidate_project_row["id"] != project_row["id"]:
+            message = f"Refusing to save candidates for {candidate_project} into {project}."
+            if skip_missing_project:
+                return {"_warnings": [message]}
+            raise ValueError(message)
     candidates = data.get("candidates", {})
     active_groups = groups or set(candidates.keys())
     saved: dict[str, list[str]] = {group: [] for group in active_groups}
     for item in candidates.get("questions", []) if "questions" in active_groups else []:
+        validate_candidate_source(conn, item, project_row["id"])
         row = create_question(
             conn,
             project,
@@ -603,6 +624,7 @@ def save_candidates_data(
         )
         saved.setdefault("questions", []).append(row["id"])
     for item in candidates.get("decisions", []) if "decisions" in active_groups else []:
+        validate_candidate_source(conn, item, project_row["id"])
         row = create_decision(
             conn,
             project,
@@ -616,6 +638,7 @@ def save_candidates_data(
         )
         saved.setdefault("decisions", []).append(row["id"])
     for item in candidates.get("artifacts", []) if "artifacts" in active_groups else []:
+        validate_candidate_source(conn, item, project_row["id"])
         row = create_artifact(
             conn,
             project,
@@ -629,6 +652,7 @@ def save_candidates_data(
         )
         saved.setdefault("artifacts", []).append(row["id"])
     for item in candidates.get("contexts", []) if "contexts" in active_groups else []:
+        validate_candidate_source(conn, item, project_row["id"])
         row = create_context(
             conn,
             project,
@@ -642,6 +666,7 @@ def save_candidates_data(
         )
         saved.setdefault("contexts", []).append(row["id"])
     for item in candidates.get("tasks", []) if "tasks" in active_groups else []:
+        validate_candidate_source(conn, item, project_row["id"])
         row = create_task(
             conn,
             project,
@@ -655,6 +680,17 @@ def save_candidates_data(
         )
         saved.setdefault("tasks", []).append(row["id"])
     return saved
+
+
+def validate_candidate_source(conn, item: dict, project_id: str) -> None:
+    source_material_id = item.get("source_material_id")
+    if not source_material_id:
+        return
+    row = conn.execute("SELECT project_id FROM source_materials WHERE id = ?", (source_material_id,)).fetchone()
+    if not row:
+        raise ValueError(f"Candidate references missing source material: {source_material_id}")
+    if row["project_id"] != project_id:
+        raise ValueError(f"Candidate source material belongs to another project: {source_material_id}")
 
 
 def artifact_from_file_args(args) -> tuple[str, str | None, str | None]:

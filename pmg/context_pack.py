@@ -101,6 +101,8 @@ def build_recall_context_pack(
             add_item(groups, entity_type, dict(item))
         rels = get_relations_for(conn, entity_type, entity_id, depth=depth)
         for rel in rels:
+            if project_id and not relation_in_project(conn, rel, project_id):
+                continue
             if rel["id"] not in seen_graph:
                 graph.append(
                     {
@@ -113,6 +115,8 @@ def build_recall_context_pack(
                 )
                 seen_graph.add(rel["id"])
         for related in related_items(conn, rels):
+            if project_id and item_project_id(related) != project_id:
+                continue
             add_item(groups, related.pop("_entity_type"), related)
 
     if not project and hits:
@@ -130,6 +134,24 @@ def build_recall_context_pack(
             "suggested_next_steps": suggest_next_steps(groups, query),
         }
     }
+
+
+def item_project_id(item: dict) -> str | None:
+    entity_type = item.get("_entity_type")
+    if entity_type == "project":
+        return item.get("id")
+    return item.get("project_id")
+
+
+def relation_in_project(conn: sqlite3.Connection, rel: dict, project_id: str) -> bool:
+    for entity_type, entity_id in ((rel["source_type"], rel["source_id"]), (rel["target_type"], rel["target_id"])):
+        row = get_by_id(conn, entity_type, entity_id)
+        if not row:
+            continue
+        row_project_id = row["id"] if entity_type == "project" else row["project_id"]
+        if row_project_id != project_id:
+            return False
+    return True
 
 
 def project_fields(project: dict) -> dict:

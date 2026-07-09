@@ -227,7 +227,7 @@ class ProjectMemoryGraphTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "pmg.sqlite"
             home = Path(tmp) / "home"
-            env = {**os.environ, "TRACK_HOME": str(home)}
+            env = {**os.environ, "TRACK_HOME": str(home), "PYTHONPATH": str(Path.cwd())}
             base = [sys.executable, "-m", "track.cli", "--db", str(db)]
             latest = home / "candidates" / "latest_candidates.json"
 
@@ -343,6 +343,94 @@ class ProjectMemoryGraphTests(unittest.TestCase):
 
             on = subprocess.run(base + ["Track", "on"], check=True, capture_output=True, text=True, env=env)
             self.assertIn("enabled", on.stdout)
+
+    def test_cli_project_resolution_prevents_cross_project_memory_pollution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = root / "track.sqlite"
+            home = root / "home"
+            project_a_dir = root / "track-alpha"
+            project_b_dir = root / "track-beta"
+            project_a_dir.mkdir()
+            project_b_dir.mkdir()
+            env = {**os.environ, "TRACK_HOME": str(home), "PYTHONPATH": str(Path.cwd())}
+            base = [sys.executable, "-m", "track.cli", "--db", str(db)]
+
+            subprocess.run(base + ["init"], check=True, capture_output=True, text=True, env=env)
+            subprocess.run(base + ["track-alpha"], cwd=project_a_dir, check=True, capture_output=True, text=True, env=env)
+            subprocess.run(base + ["track-beta"], cwd=project_b_dir, check=True, capture_output=True, text=True, env=env)
+
+            auto = subprocess.run(
+                base + ["auto", "--text", "AlphaOnlyQuestion 是否需要默认记录在 A 项目？下一步需要实现 AlphaOnlyTask。"],
+                cwd=project_a_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertTrue(json.loads(auto.stdout)["tracked"])
+
+            note = root / "alpha-note.md"
+            note.write_text("AlphaBackfillOnly 必须只进入 A 项目。下一步需要实现 AlphaBackfillTask。", encoding="utf-8")
+            subprocess.run(base + ["backfill"], cwd=project_a_dir, check=True, capture_output=True, text=True, env=env)
+            subprocess.run(base + ["import", "file", "--path", str(note)], cwd=project_a_dir, check=True, capture_output=True, text=True, env=env)
+            subprocess.run(base + ["backfill", "extract"], cwd=project_a_dir, check=True, capture_output=True, text=True, env=env)
+
+            subprocess.run(
+                base + ["capture", "--project", "track-alpha", "--text", "AlphaSaveOnly 下一步需要实现 save 防串写。", "--dry-run"],
+                cwd=project_a_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            refused = subprocess.run(
+                base + ["save", "--project", "track-beta", "--all"],
+                cwd=project_b_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn("Refusing to save candidates for track-alpha into track-beta", refused.stdout)
+
+            recall_a = subprocess.run(
+                base + ["recall", "AlphaOnlyQuestion AlphaBackfillOnly", "--project", "track-alpha", "--format", "json"],
+                cwd=project_a_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            matched_a = json.loads(recall_a.stdout)["context_pack"]["matched_items"]
+            self.assertTrue(matched_a["questions"] or matched_a["decisions"] or matched_a["tasks"])
+
+            recall_b = subprocess.run(
+                base + ["recall", "AlphaOnlyQuestion AlphaBackfillOnly AlphaSaveOnly", "--project", "track-beta", "--format", "json"],
+                cwd=project_b_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            matched_b = json.loads(recall_b.stdout)["context_pack"]["matched_items"]
+            self.assertFalse(any(matched_b.values()))
+
+            pack_b = subprocess.run(base + ["track-beta"], cwd=project_b_dir, check=True, capture_output=True, text=True, env=env)
+            self.assertNotIn("AlphaOnlyQuestion", pack_b.stdout)
+            self.assertNotIn("AlphaBackfillOnly", pack_b.stdout)
+            with connect(db) as conn:
+                beta = conn.execute("SELECT id FROM projects WHERE name = 'track-beta'").fetchone()
+                rows = conn.execute(
+                    """
+                    SELECT entity_type, entity_id, project_id, title, body
+                    FROM search_index
+                    WHERE project_id = ?
+                      AND (title LIKE '%Alpha%' OR body LIKE '%Alpha%')
+                    """,
+                    (beta["id"],),
+                ).fetchall()
+            self.assertEqual([], rows)
 
 
 if __name__ == "__main__":
